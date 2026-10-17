@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<title>Espectáculo – Auditorio Nacional · Entradas</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="barra" id="barra" hidden>
+  <div>
+    <img src="/logo.png" alt="JB Dance Academy">
+    <nav class="pestanas" role="tablist">
+      <button class="pestana" role="tab" id="tabVender" aria-selected="true">Vender</button>
+      <button class="pestana" role="tab" id="tabPanel" aria-selected="false">Pagos<span class="contador-pestana" id="contadorPendientes" hidden></span></button>
+      <button class="btn-salir" id="btnSalir">Salir</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ======= LOGIN ======= -->
+  <section class="login" id="vLogin" hidden>
+    <img src="/logo.png" alt="JB Dance Academy">
+    <h1>Espectáculo <span>–</span> Auditorio Nacional</h1>
+    <form class="tarjeta" id="formLogin" autocomplete="on" style="text-align:left">
+      <div class="campos">
+        <label class="campo">Usuario
+          <input type="text" id="loginUsuario" name="username" autocomplete="username" autocapitalize="none" required>
+        </label>
+        <label class="campo">Clave
+          <input type="password" id="loginClave" name="password" autocomplete="current-password" required>
+        </label>
+      </div>
+      <div id="loginError"></div>
+      <button class="btn primario bloque" style="margin-top:16px" id="btnEntrar">Entrar</button>
+    </form>
+  </section>
+
+  <!-- ======= VENDER ======= -->
+  <section id="vVender" hidden>
+    <h1 class="titulo">Espectáculo <span>–</span> Auditorio Nacional</h1>
+    <p class="subtitulo">JB Dance Academy · Venta de entradas</p>
+
+    <div class="tarjeta barra-evento">
+      <span class="campo" id="lblEvento">Evento</span>
+      <div class="eventos" id="barraEventos" role="radiogroup" aria-labelledby="lblEvento"></div>
+    </div>
+
+    <div id="bloqueSeleccion">
+      <div class="tarjeta">
+        <h2><span class="paso">1</span>Comprador</h2>
+        <label class="campo" for="inNombre">Nombre y apellidos</label>
+        <div class="relativo" style="margin-top:6px">
+          <input type="text" id="inNombre" placeholder="Escribe para buscar…" autocomplete="off" autocapitalize="words" spellcheck="false" aria-autocomplete="list" aria-controls="sugerencias">
+          <div class="sugerencias" id="sugerencias" role="listbox" hidden></div>
+        </div>
+        <p class="ayuda" id="ayudaNombre">Elige de la lista o escribe un nombre nuevo (nombre y apellidos).</p>
+      </div>
+
+      <div class="tarjeta">
+        <h2><span class="paso">2</span>Asientos</h2>
+        <p class="progreso" id="progreso"></p>
+        <div class="mapa-caja" id="mapaCaja"></div>
+        <div class="chips" id="chipsSel"></div>
+        <div class="total-linea">
+          <small><span id="txtPrecio">₡11,000</span> por asiento</small>
+          <span class="monto num" id="txtTotal">₡0</span>
+        </div>
+        <div id="avisoMapa"></div>
+        <div class="fila-botones">
+          <button class="btn primario" id="btnConfirmar" disabled>Confirmar</button>
+          <button class="btn" id="btnLimpiar" type="button">Limpiar selección</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 3: el código de pago -->
+    <div id="bloquePago" hidden>
+      <div class="tarjeta">
+        <h2><span class="paso">3</span>Pago</h2>
+        <div class="resumen-venta">
+          <div class="evento-tag" id="pgEvento"></div>
+          <div class="nombre" id="pgNombre"></div>
+          <div class="chips" id="pgChips"></div>
+          <div class="monto-grande num" id="pgMonto"></div>
+          <div style="color:var(--suave)" id="pgDetalle"></div>
+        </div>
+        <form id="formCodigo" autocomplete="off" style="margin-top:18px">
+          <label class="campo" for="inCodigo">Código de pago del comprador</label>
+          <div class="fila-codigo">
+            <input type="text" id="inCodigo" class="codigo-input" placeholder="AE472" maxlength="12" autocapitalize="characters" spellcheck="false" inputmode="text" autocomplete="off">
+            <button class="btn primario" id="btnValidar">Validar código</button>
+          </div>
+          <p class="ayuda">El comprador lo recibe al subir su comprobante en la página de pago. Cada código se puede usar una sola vez.</p>
+        </form>
+        <div id="avisoPago"></div>
+        <div class="fila-botones"><button class="btn" id="btnVolver" type="button">← Cambiar asientos</button></div>
+      </div>
+      <div id="resultadoCodigo"></div>
+    </div>
+
+    <!-- Paso 4: listo -->
+    <div id="bloqueExito" hidden>
+      <div class="tarjeta exito">
+        <div class="check">✓</div>
+        <h2 style="font-size:34px;margin-top:6px">Venta registrada</h2>
+        <div class="evento-tag" id="exEvento"></div>
+        <div class="codigo-grande" id="exCodigo"></div>
+        <p>Código del comprador. Entrégaselo para que lo conserve.</p>
+        <div style="font:400 30px var(--fuente-titulo);letter-spacing:.04em" id="exNombre"></div>
+        <div class="chips" id="exChips"></div>
+        <div style="margin-top:8px;font:400 34px var(--fuente-titulo);letter-spacing:.03em" id="exTotal"></div>
+        <div class="fila-botones" style="justify-content:center">
+          <button class="btn" id="btnCopiar">Copiar mensaje</button>
+          <button class="btn primario" id="btnNueva">Nueva venta</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======= PANEL ======= -->
+  <section id="vPanel" hidden>
+    <h1 class="titulo" style="font-size:clamp(30px,5vw,48px)">Verificar pagos</h1>
+    <p class="subtitulo">Los compradores suben su comprobante; aquí lo verificas con el código.</p>
+    <div class="filtros" id="filtroEvento"></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="filtros" id="filtros"></div>
+    <div id="listaVentas"></div>
+
+    <div class="fila-botones" style="margin-bottom:22px">
+      <button class="btn" id="btnExcel">Descargar Excel</button>
+      <button class="btn peligro" id="btnBorrarImg">Borrar imágenes de comprobantes</button>
+    </div>
+
+    <details class="tarjeta lista-nombres">
+      <summary>Lista de nombres</summary>
+      <p class="ayuda" style="margin:10px 0">Estos nombres aparecen al escribir en el formulario. Pega uno por línea (nombre y apellidos). Quienes suben un pago sin asignar y los compradores nuevos se agregan solos.</p>
+      <textarea id="txtNombres" placeholder="María Pérez Solís&#10;Juan Mora Vega&#10;…"></textarea>
+      <div class="fila-botones"><button class="btn" id="btnGuardarNombres">Agregar nombres</button></div>
+      <div id="avisoNombres"></div>
+      <div class="nombres-guardados" id="nombresGuardados"></div>
+    </details>
+  </section>
+</main>
+
+<div id="modales"></div>
+<script src="/vendor/xlsx-0.18.5.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
