@@ -77,6 +77,13 @@ dominio (ej. `https://entradas.tudominio.com`) → variables → *Deploy*.
 2. En Supabase → SQL Editor pega **todo** `schema.sql` y *Run*. Es seguro sobre la base ya existente: crea los eventos, pasa lo vendido hasta ahora a **Ballet** y no borra nada.
 3. Reinicia el servidor y recarga la página con Ctrl+F5.
 
+## Clave de Jose
+Jose la cambia solo, desde la página: botón **Clave** (arriba, junto a *Salir*) → clave actual, clave nueva (mínimo 10 caracteres) y repetirla.
+- La clave nueva se guarda **cifrada** (scrypt) en la base de datos y manda sobre la variable `ADMIN_CLAVE`, que queda como clave inicial.
+- Al cambiarla se cierran todas las demás sesiones abiertas; la de quien la cambió sigue.
+- **Si Jose la olvida:** en Supabase → SQL Editor ejecuta `delete from config where clave = 'admin_clave_hash';` y entra otra vez con la clave que tenga `ADMIN_CLAVE` en Coolify.
+- Hay que ejecutar `schema.sql` de nuevo en Supabase para que exista esta función (es seguro repetirlo).
+
 ## Cambiar precio, nombres de eventos o máximo por venta
 En Supabase → SQL Editor:
 ```sql

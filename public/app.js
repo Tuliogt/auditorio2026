@@ -252,6 +252,33 @@ $('#formLogin').addEventListener('submit', async (ev) => {
   $('#loginClave').value = ''; aviso($('#loginError'), 'error', '');
   arrancar();
 });
+// ---------- cambiar la clave de Jose ----------
+$('#btnClave').addEventListener('click', () => {
+  const campo = (id, etiqueta, auto) => h('label', { class: 'campo', for: id }, etiqueta,
+    h('input', { type: 'password', id, autocomplete: auto, maxlength: 100, style: 'margin-top:6px' }));
+  const msg = h('div'); const btn = h('button', { class: 'btn primario', type: 'submit' }, 'Cambiar clave');
+  const form = h('form', { id: 'formClave', autocomplete: 'off' },
+    h('div', { class: 'campos' },
+      campo('claveActual', 'Clave actual', 'current-password'),
+      campo('claveNueva', 'Clave nueva (mínimo 10 caracteres)', 'new-password'),
+      campo('claveNueva2', 'Repite la clave nueva', 'new-password')),
+    msg, h('div', { class: 'fila-botones' }, btn));
+  const w = ventana({ titulo: 'Cambiar mi clave', cuerpo: form, angosta: true });
+  $('#claveActual').focus();
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const actual = $('#claveActual').value, nueva = $('#claveNueva').value, otra = $('#claveNueva2').value;
+    if (!actual) return aviso(msg, 'error', 'Escribe tu clave actual.');
+    if (nueva.length < 10) return aviso(msg, 'error', 'La clave nueva debe tener al menos 10 caracteres.');
+    if (nueva !== otra) return aviso(msg, 'error', 'Las dos claves nuevas no coinciden.');
+    btn.disabled = true; btn.textContent = 'Guardando…'; aviso(msg, 'error', '');
+    const r = await api('/api/clave/cambiar', { actual, nueva });
+    btn.disabled = false; btn.textContent = 'Cambiar clave';
+    if (!r.ok) return aviso(msg, 'error', r.j.error || 'No se pudo cambiar la clave.');
+    w.cerrar(); toast('Clave cambiada. Las demás sesiones abiertas se cerraron.');
+  });
+});
+
 $('#btnSalir').addEventListener('click', async () => { await api('/api/logout', {}); location.reload(); });
 
 async function arrancar() {

@@ -1155,6 +1155,24 @@ begin
   return jsonb_build_object('ok', true, 'limpiados', n);
 end $$;
 
+-- 13) Clave de Jose (guardada ya cifrada por el servidor; la clave real nunca llega aquí).
+--     Si esta fila existe, manda sobre la variable ADMIN_CLAVE del servidor.
+--     Para volver a la clave de ADMIN_CLAVE:  delete from config where clave = 'admin_clave_hash';
+create or replace function obtener_clave_admin() returns text
+language sql stable set search_path = public as
+$$ select valor from config where clave = 'admin_clave_hash' $$;
+
+create or replace function guardar_clave_admin(p_hash text) returns jsonb
+language plpgsql set search_path = public as $$
+begin
+  if p_hash is null or p_hash !~ '^scrypt\$[0-9]+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$' or length(p_hash) > 300 then
+    return jsonb_build_object('ok', false, 'error', 'hash_invalido');
+  end if;
+  insert into config (clave, valor) values ('admin_clave_hash', p_hash)
+  on conflict (clave) do update set valor = excluded.valor;
+  return jsonb_build_object('ok', true);
+end $$;
+
 -- ============================================================
 --  Seguridad: nada es público. Solo el servidor (service_role) entra.
 -- ============================================================
@@ -1178,7 +1196,7 @@ begin
      where n.nspname = 'public'
        and p.proname in ('cfg_int','generar_codigo','info_publica','registrar_comprobante','buscar_pago','consultar_codigo',
                          'vender_asientos','rechazar_pago','anular_venta','cambiar_asientos','mapa_asientos','listar_pagos',
-                         'resumen','listar_personas','guardar_personas','eliminar_persona','adjuntar_comprobante','quitar_comprobantes')
+                         'resumen','listar_personas','guardar_personas','eliminar_persona','adjuntar_comprobante','quitar_comprobantes','obtener_clave_admin','guardar_clave_admin')
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.firma);
     execute format('grant execute on function %s to service_role', f.firma);

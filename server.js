@@ -53,6 +53,7 @@ const BANCO_DESTINO = (process.env.BANCO_DESTINO || '').trim();
 const FECHA_BORRADO = (process.env.FECHA_BORRADO || '').trim();
 
 const limiteLogin = crearLimitador({ maximo: 8, ventanaMs: 10 * 60 * 1000 });
+const limiteClave = crearLimitador({ maximo: 10, ventanaMs: 10 * 60 * 1000 });
 const limiteOcr = crearLimitador({ maximo: Number(process.env.LIMITE_REGISTROS) || 40, ventanaMs: 10 * 60 * 1000 });
 const limiteConsulta = crearLimitador({ maximo: 15, ventanaMs: 10 * 60 * 1000 });
 const limiteGeneral = crearLimitador({ maximo: 600, ventanaMs: 5 * 60 * 1000 });
@@ -98,6 +99,7 @@ const POST = {
   // Jose
   '/api/login': manejarLogin,
   '/api/logout': manejarLogout,
+  '/api/clave/cambiar': manejarCambiarClave,
   '/api/pago/buscar': manejarBuscarPago,
   '/api/vender': manejarVender,
   '/api/rechazar': manejarRechazar,
@@ -130,6 +132,7 @@ export const servidor = http.createServer(async (req, res) => {
       if (!limiteGeneral(ip).ok) return json(res, { error: 'Demasiadas peticiones. Espera un momento.' }, 429);
 
       const ctx = { req, res, url, ip };
+      if (claveDB === undefined) await cargarClave();
       if (!PUBLICAS.has(ruta) && !haySesion(req)) return json(res, { error: 'Sesión vencida. Entra de nuevo.', sesion: false }, 401);
 
       if (ruta.startsWith('/api/comprobante/')) {
@@ -182,9 +185,37 @@ if (process.env.NO_ESCUCHAR !== 'true') {
 // ------------------------------------------------------------
 // Sesión
 // ------------------------------------------------------------
+// La clave de Jose puede cambiarse desde la página: se guarda CIFRADA (scrypt) en la base
+// de datos y manda sobre la variable ADMIN_CLAVE. undefined = aún no se leyó, null = no hay.
+let claveDB;
+const scryptAsync = (clave, sal, N) => new Promise((ok, mal) =>
+  crypto.scrypt(clave, sal, 64, { N, maxmem: 64 * 1024 * 1024 }, (e, k) => (e ? mal(e) : ok(k))));
+async function hashearClave(clave) {
+  const N = 16384; const sal = crypto.randomBytes(16);
+  const k = await scryptAsync(clave, sal, N);
+  return `scrypt$${N}$${sal.toString('base64')}$${k.toString('base64')}`;
+}
+async function verificarHash(clave, hash) {
+  const [tipo, n, sal, k] = String(hash).split('$');
+  if (tipo !== 'scrypt' || !n || !sal || !k) return false;
+  const esperado = Buffer.from(k, 'base64');
+  const calculado = await scryptAsync(clave, Buffer.from(sal, 'base64'), Number(n));
+  return calculado.length === esperado.length && crypto.timingSafeEqual(calculado, esperado);
+}
+async function cargarClave() {
+  try { claveDB = (await rpc('obtener_clave_admin')) || null; return true; }
+  catch (e) { console.error('No se pudo leer la clave de acceso:', e.message); return false; }
+}
+const hayClave = () => Boolean(claveDB || ADMIN_CLAVE);
+async function claveCorrecta(clave) {
+  return claveDB ? verificarHash(clave, claveDB) : iguales(clave, ADMIN_CLAVE);
+}
+// Al cambiar la clave cambia este secreto, y con él se cierran todas las sesiones anteriores.
+const secretoSesion = () => SESION_SECRETO + ':' + (claveDB ? crypto.createHash('sha256').update(claveDB).digest('hex').slice(0, 16) : 'env');
+
 function haySesion(req) {
-  if (!ADMIN_CLAVE) return false;                       // sin clave configurada, nadie entra
-  return sesionValida(leerCookie(req, 'sesion'), SESION_SECRETO, ADMIN_USUARIO);
+  if (claveDB === undefined || !hayClave()) return false;   // sin clave leída o configurada, nadie entra
+  return sesionValida(leerCookie(req, 'sesion'), secretoSesion(), ADMIN_USUARIO);
 }
 
 function cookieSesion(req, valor, maxAgeSeg) {
@@ -201,21 +232,49 @@ async function manejarLogin({ req, res, ip }) {
   if (!permiso.ok) {
     return json(res, { error: `Demasiados intentos. Espera ${Math.ceil(permiso.esperaSegundos / 60)} minutos.` }, 429);
   }
-  if (!ADMIN_CLAVE) return json(res, { error: 'El servidor no tiene configurada la clave de acceso.' }, 500);
+  if (claveDB === undefined && !(await cargarClave())) return json(res, { error: 'No se pudo hablar con la base de datos. Intenta de nuevo.' }, 502);
+  if (!hayClave()) return json(res, { error: 'El servidor no tiene configurada la clave de acceso.' }, 500);
 
   const c = await leerJsonSeguro(req, res); if (!c) return;
   const okUsuario = iguales(String(c.usuario || '').trim().toLowerCase(), ADMIN_USUARIO.toLowerCase());
-  const okClave = iguales(String(c.clave || ''), ADMIN_CLAVE);
+  const okClave = await claveCorrecta(String(c.clave || ''));
   if (!(okUsuario && okClave)) {
     await new Promise((r) => setTimeout(r, 600));       // frena el ensayo y error
     return json(res, { error: 'Usuario o clave incorrectos.' }, 401);
   }
-  const valor = firmarSesion(SESION_SECRETO, ADMIN_USUARIO, DURACION_SESION);
+  const valor = firmarSesion(secretoSesion(), ADMIN_USUARIO, DURACION_SESION);
   res.writeHead(200, cabeceras({
     'content-type': 'application/json; charset=utf-8',
     'set-cookie': cookieSesion(req, valor, DURACION_SESION / 1000),
   }));
   res.end(JSON.stringify({ ok: true, usuario: ADMIN_USUARIO }));
+}
+
+// Jose cambia su clave desde la página (necesita estar dentro y escribir la clave actual).
+async function manejarCambiarClave({ req, res, ip }) {
+  const permiso = limiteClave(ip);
+  if (!permiso.ok) return json(res, { error: `Demasiados intentos. Espera ${Math.ceil(permiso.esperaSegundos / 60)} minutos.` }, 429);
+  const c = await leerJsonSeguro(req, res); if (!c) return;
+  const actual = String(c.actual || ''); const nueva = String(c.nueva || '');
+  if (!(await claveCorrecta(actual))) {
+    await new Promise((r) => setTimeout(r, 600));
+    return json(res, { error: 'La clave actual no es correcta.' }, 403);
+  }
+  if (nueva.length < 10) return json(res, { error: 'La clave nueva debe tener al menos 10 caracteres.' }, 400);
+  if (nueva.length > 100) return json(res, { error: 'La clave nueva es demasiado larga (máximo 100).' }, 400);
+  if (nueva === actual) return json(res, { error: 'La clave nueva debe ser distinta a la actual.' }, 400);
+  return conBase(res, async () => {
+    const hash = await hashearClave(nueva);
+    const r = await rpc('guardar_clave_admin', { p_hash: hash });
+    if (!r || !r.ok) return json(res, { error: 'No se pudo guardar la clave.' }, 500);
+    claveDB = hash;                       // desde ya, las sesiones anteriores dejan de valer
+    // Esta sesión sigue abierta con una cookie nueva; cualquier otra se cierra.
+    res.writeHead(200, cabeceras({
+      'content-type': 'application/json; charset=utf-8',
+      'set-cookie': cookieSesion(req, firmarSesion(secretoSesion(), ADMIN_USUARIO, DURACION_SESION), DURACION_SESION / 1000),
+    }));
+    res.end(JSON.stringify({ ok: true }));
+  });
 }
 
 async function manejarLogout({ req, res }) {
